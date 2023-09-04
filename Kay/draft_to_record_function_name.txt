@@ -1,0 +1,2 @@
+class simple_processor: A simple processor with sigma_x and sigma_y control
+class simple_compiler: Generate the pulse (a tlist and a coefficient) given the gate
