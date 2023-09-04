@@ -23,7 +23,7 @@ matrix_list = [
     rx(0)
 ]
 
-def inverse_search(state_after_clifford,init_state, matrix_list = matrix_list):
+def _inverse_search(state_after_clifford, init_state, matrix_list = matrix_list):
     # Index of 2 gates that inverse the clifford sequence
     index_list = [i for i in itertools.product(range(len(matrix_list)), range(len(matrix_list)))]
     # Product of said 2 gates
@@ -40,10 +40,12 @@ def inverse_search(state_after_clifford,init_state, matrix_list = matrix_list):
         if np.allclose(final_state,init_state):
             return index_list[i]
         
-def add_inverse_gates(clifford,init_state, matrix_list = matrix_list, gates_set = gates_set):
-    x = inverse_search(clifford*init_state,matrix_list,init_state)
+def add_inverse_gates(clifford, init_state, matrix_list = matrix_list, gates_set = gates_set, circuit = None):
+    x = _inverse_search(clifford*init_state, init_state, matrix_list)
     if x == None:
         raise RuntimeError("Could not find an inverse Clifford")
+    elif circuit == None:
+        raise TypeError('NoneType object')
     elif not x[0] == 6 and not x[1] == 6:
         circuit.add_gate(gates_set[x[1]])
         circuit.add_gate(gates_set[x[0]])
