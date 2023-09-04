@@ -4,6 +4,8 @@ from qutip.qip.operations.gates import *
 import itertools
 from qutip import Qobj
 
+__all__ = ['gate_set', 'matrix_list', 'add_inverse_gates']
+
 gates_set = [
     Gate("RX", 0, arg_value=np.pi), # X Pulse
     Gate("RY", 0, arg_value=np.pi), # Y Pulse
@@ -22,25 +24,47 @@ matrix_list = [
     ry(-np.pi / 2), # -Y/2
     rx(0)
 ]
-
-def _inverse_search(state_after_clifford, init_state, matrix_list = matrix_list):
-    # Index of 2 gates that inverse the clifford sequence
-    index_list = [i for i in itertools.product(range(len(matrix_list)), range(len(matrix_list)))]
-    # Product of said 2 gates
-    inverse_list = [i[0]*i[1] for i in itertools.product(matrix_list, matrix_list)]
-    
-    for i in range(len(inverse_list)):
-        # Find final state after applying the 2 inverse gates and "normalize"
-        final_state = inverse_list[i] * state_after_clifford
-        if np.round(final_state[0][0][0],2) == 0:
-            final_state = final_state/final_state[1][0][0]
-        else:
-            final_state = final_state/final_state[0][0][0]
-        # Compare to ground state
-        if np.allclose(final_state,init_state):
-            return index_list[i]
         
 def add_inverse_gates(clifford, init_state, matrix_list = matrix_list, gates_set = gates_set, circuit = None):
+    """Add 0,1 or 2 gates that inverse the given gate(s)
+
+        Args:
+            clifford (qutip.Qobj): A qutip Qobj result from multiplying 
+            the sequence of Clifford apply to the qubit.
+            init_state (qutip.Qobj): The initial state.
+            matrix_list (list of qutip.Qobj): A list of quantum gates in matrix form.
+            gates_set (list of qutip_qip.circuit.Gate): A list of qutip Gate objects 
+            that corresponds to the quantum gates given by matrix_list.
+            circuit (qutip_qip.circuit.QubitCircuit): The circuit that the gates applied on.
+        """
+    def _inverse_search(state_before_inverse, init_state, matrix_list = matrix_list):
+        """Find 2 gates from a list of gates that when apply to a given state give the initial state.
+
+        Args:
+            state_before_inverse (qutip.Qobj): The quantum state that need to be inversed.
+            init_state (qutip.Qobj): The initial state.
+            matrix_list (list of qutip.Qobj): A list of quantum gates in matrix form.
+
+        Returns:
+            index_list (tuple): The index (indicies) in the matrix list 
+            of the two gates that inverse the state.
+        """
+        # Index of 2 gates that inverse the clifford sequence
+        index_list = [i for i in itertools.product(range(len(matrix_list)), range(len(matrix_list)))]
+        # Product of said 2 gates
+        inverse_list = [i[0]*i[1] for i in itertools.product(matrix_list, matrix_list)]
+        
+        for i in range(len(inverse_list)):
+            # Find final state after applying the 2 inverse gates and "normalize"
+            final_state = inverse_list[i] * state_before_inverse
+            if np.round(final_state[0][0][0],2) == 0:
+                final_state = final_state/final_state[1][0][0]
+            else:
+                final_state = final_state/final_state[0][0][0]
+            # Compare to ground state
+            if np.allclose(final_state,init_state):
+                return index_list[i]
+    
     x = _inverse_search(clifford*init_state, init_state, matrix_list)
     if x == None:
         raise RuntimeError("Could not find an inverse Clifford")

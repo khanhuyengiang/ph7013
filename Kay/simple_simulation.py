@@ -14,6 +14,8 @@ import numpy as np
 import sys
 from clifford_inverse_search import gates_set, matrix_list, add_inverse_gates
 
+__all__ = ['simple_processor','simple_compiler','single_simple_simulation']
+
 class simple_processor(ModelProcessor):
     """
     Custom processor built using ModelProcessor as the base class.
