@@ -131,8 +131,8 @@ def single_simple_simulation(num_gates, t1 = None, t2 = None, num_qubits = 1, ad
 
     Returns:
         final_fidelity (float):
-            Fidelity of the result state obtained from 
-            mesolve solver method and the initial state.
+            Fidelity of the result state (obtained from 
+            mesolve solver method) and the initial state.
     """
      
     myprocessor = simple_processor(num_qubits, t1 = t1, t2 = t2)
