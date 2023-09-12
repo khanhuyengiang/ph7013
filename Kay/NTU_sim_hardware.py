@@ -1,21 +1,24 @@
-from qutip_qip.compiler import GateCompiler, Instruction
-from qutip_qip.device import ModelProcessor
-from qutip import (sigmax, sigmay, tensor)
-
-import functools # for reduce
-from qutip.qip.operations.gates import *
-from qutip import basis
-from qutip_qip.circuit import QubitCircuit
-from qutip.metrics import fidelity
-from qutip.qip.noise import RandomNoise
-
-import numpy as np
-from scipy.signal import argrelextrema
-
-from inverse_search import gates_set_generator, matrix_list, add_inverse_gates
-
+"""NTU_processor and NTU_compiler class, for simulating the qubit. 
+Function NTU_single_sim for simulating a single simulation, 
+and function NTU_sim_test_run for simulating (and average over) several simulation.
+"""
 
 __all__ = ['NTU_processor','NTU_compiler','NTU_single_sim', 'NTU_sim_test_run']
+
+# Qutip
+from qutip import (sigmax, sigmay, tensor, basis)
+from qutip.metrics import fidelity
+from qutip_qip.circuit import QubitCircuit
+from qutip_qip.compiler import GateCompiler, Instruction
+from qutip_qip.device import ModelProcessor
+from qutip.qip.noise import RandomNoise
+from qutip.qip.operations.gates import *
+
+import numpy as np
+import functools # for reduce
+from scipy.signal import argrelextrema 
+# Import function to generate a gate set and add inverse gates 
+from inverse_search import gates_set_generator, matrix_list, add_inverse_gates
 
 
 class NTU_processor(ModelProcessor):
@@ -204,8 +207,8 @@ def NTU_single_sim(num_qubits, num_gates, gates_set, param_dict,
 
 
 def NTU_sim_test_run(num_qubits: int, num_gates_list: list, num_samples: int, param_dict: dict,
-                            t1 = None, t2 = None, add_FPGA_noise = True,
-                            ):
+                     t1 = None, t2 = None, add_FPGA_noise = True,
+                    ):
     """
     Find the Clifford gate set correspond to the Hamiltonian, 
     then run a sample test run of several simulation, with 
