@@ -4,7 +4,7 @@ from qutip.qip.operations.gates import *
 import itertools
 from qutip import Qobj
 
-__all__ = ['gate_set_generator', 'matrix_list', 'add_inverse_gates']
+__all__ = ['gates_set_generator', 'gates_set' 'matrix_list', 'add_inverse_gates']
 
 def gates_set_generator(x):
     """ Generate a set of RX and RY gates with argument value as a multiple of pi.
@@ -14,8 +14,8 @@ def gates_set_generator(x):
     Gate("RY", 0, arg_value= x * np.pi), # Y Pulse
     Gate("RX", 0, arg_value= x * np.pi / 2), # X Half Pulse
     Gate("RY", 0, arg_value= x * np.pi / 2), # Y Half Pulse
-    Gate("RX", 0, arg_value=- x * np.pi / 2), # X Minus Half Pulse
-    Gate("RY", 0, arg_value=- x * np.pi / 2), # Y Minus Half Pulse
+    Gate("RX", 0, arg_value= -x * np.pi / 2), # X Minus Half Pulse
+    Gate("RY", 0, arg_value= -x * np.pi / 2), # Y Minus Half Pulse
     ]
 
 matrix_list = [
