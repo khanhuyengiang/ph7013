@@ -1,3 +1,5 @@
+__all__ = ['simple_compiler','simple_single_sim', 'simple_sim_test_run', 'NTU_simple_single_sim']
+
 # Qutip
 from qutip import (sigmax, sigmay, tensor, basis)
 from qutip.metrics import fidelity
@@ -11,58 +13,9 @@ import numpy as np
 import functools # for reduce
 
 from inverse_search import gates_set_generator, matrix_list, add_inverse_gates
-
-__all__ = ['simple_processor','simple_compiler','single_simple_sim', 
-           'sim_test_run', 'NTU_single_simple_sim']
+from NTU_sim import NTU_processor
 
 gates_set = gates_set_generator(1)
-
-
-class simple_processor(ModelProcessor):
-    """
-    Custom processor built using ModelProcessor as the base class.
-    This custom processor will inherit all the methods of the base class
-    such as setting up of the T1 and T2 decoherence rates in the sims.
-
-    Args:
-        num_qubits (int): Number of qubits in the processor.
-        t1, t2 (float or list): The T1 and T2 decoherence rates for the
-    """
-
-    def __init__(self, num_qubits, t1=None, t2=None):
-        # call the parent class initializer
-        super(simple_processor, self).__init__(num_qubits, t1=t1, t2=t2)  
-        # The control pulse is discrete or continous.
-        self.pulse_mode = "discrete"
-        # The dimension of each controllable quantum system
-        self.model.dims = [2] * num_qubits
-        self.num_qubits = num_qubits
-        self.set_up_ops()  # set up the available Hamiltonians
-        self.native_gates = ["RX", "RY"]
-
-    def set_up_ops(self):
-        """
-        Sets up the control operators.
-        """
-        # sigmax pulse on m-th qubit with the corresponding pulse
-        for m in range(self.num_qubits):
-            self.add_control(1/2*sigmax(), m, label="sx" + str(m))
-        # sy
-        for m in range(self.num_qubits):
-            self.add_control(1/2*sigmay(), m, label="sy" + str(m))
-    
-    # To remove errors arise from RandomNoise not being recognized
-    # as a type Noise, may cause trouble in the future?
-    def add_noise(self, noise):
-        """
-        Add a noise object to the processor
-
-        Parameters
-        ----------
-        noise: :class:`.Noise`
-            The noise object defined outside the processor
-        """
-        self.noise.append(noise)
 
 
 class simple_compiler(GateCompiler):
@@ -124,9 +77,10 @@ class simple_compiler(GateCompiler):
             return self.generate_pulse(gate, tlist = coupling_time_series, coeff = FPGA_voltage, phase=np.pi / 2)
 
 
-def single_simple_sim(num_gates, t1 = None, t2 = None, num_qubits = 1, add_FPGA_noise = True):
+def simple_single_sim(num_gates, t1 = None, t2 = None, 
+                      num_qubits = 1, add_FPGA_noise = True):
     """
-    A single sim, with num_gates representing the number of rotations.
+    A single simulation, with num_gates representing the number of rotations.
 
     Args:
         num_gates (int): The number of random gates to add in the sim.
@@ -139,7 +93,7 @@ def single_simple_sim(num_gates, t1 = None, t2 = None, num_qubits = 1, add_FPGA_
             mesolve solver method) and the initial state.
     """
      
-    myprocessor = simple_processor(num_qubits, t1 = t1, t2 = t2)
+    myprocessor = NTU_processor(num_qubits, t1 = t1, t2 = t2)
     myprocessor.native_gates = None  # Remove the native gates
     mycompiler = simple_compiler(num_qubits,{"pulse_amplitude": 1})
 
@@ -171,11 +125,11 @@ def single_simple_sim(num_gates, t1 = None, t2 = None, num_qubits = 1, add_FPGA_
     return final_fidelity
 
 
-def sim_test_run(num_gates_list, num_sample, add_FPGA_noise = True, t1 = None, t2 = None):
+def simple_sim_test_run(num_gates_list, num_sample, add_FPGA_noise = True, t1 = None, t2 = None):
     fidelity_average = []
     fidelity_error = []
     for num_gates in num_gates_list:
-        fidelity_list = [single_simple_sim(
+        fidelity_list = [simple_single_sim(
             num_gates, t1 = t1, t2 = t2, add_FPGA_noise = add_FPGA_noise
             ) for i in range(num_sample)]
         fidelity_average.append(np.mean(fidelity_list))
@@ -184,11 +138,11 @@ def sim_test_run(num_gates_list, num_sample, add_FPGA_noise = True, t1 = None, t
     return fidelity_average, fidelity_error
 
 
-def NTU_single_simple_sim(num_gates, t1 = None, t2 = None, num_qubits = 1,
+def NTU_simple_single_sim(num_gates, t1 = None, t2 = None, num_qubits = 1,
                                  add_FPGA_noise = False, FPGA_noise_strength = 0.3,
                                  pulse_amplitude = 1):
     """
-    A single sim, with num_gates representing the number of rotations.
+    A single simulation, with num_gates representing the number of rotations.
 
     Args:
         num_gates (int): The number of random gates to add in the sim.
@@ -203,7 +157,7 @@ def NTU_single_simple_sim(num_gates, t1 = None, t2 = None, num_qubits = 1,
             mesolve solver method) and the initial state.
     """
      
-    myprocessor = simple_processor(num_qubits, t1 = t1, t2 = t2)
+    myprocessor = NTU_processor(num_qubits, t1 = t1, t2 = t2)
     myprocessor.native_gates = None  # Remove the native gates
     mycompiler = simple_compiler(num_qubits,{"pulse_amplitude": pulse_amplitude})
 

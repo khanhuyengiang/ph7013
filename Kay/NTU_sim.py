@@ -6,7 +6,7 @@ and function NTU_sim_test_run for simulating (and average over) several simulati
 __all__ = ['NTU_processor','NTU_compiler','NTU_single_sim', 'NTU_sim_test_run']
 
 # Qutip
-from qutip import (sigmax, sigmay, tensor, basis)
+from qutip import (sigmax, sigmay, tensor, basis, Qobj)
 from qutip.metrics import fidelity
 from qutip_qip.circuit import QubitCircuit
 from qutip_qip.compiler import GateCompiler, Instruction
@@ -150,20 +150,22 @@ class NTU_compiler(GateCompiler):
             return self.generate_pulse(gate, tlist = coupling_time_series, coeff = FPGA_voltage, phase=phase)
 
 
-def NTU_single_sim(num_qubits, num_gates, gates_set, param_dict,
-                   t1 = None, t2 = None,
-                   add_FPGA_noise = True,):
+def NTU_single_sim(num_qubits: int, num_gates: int, gates_set: list, param_dict: dict,
+                   init_state = None,
+                   t1 = None, t2 = None, add_FPGA_noise = True,
+                   ):
     """
     A single simulation, with num_gates representing the number of rotations.
     
     Args:
         num_gates (int): The number of random gates to add in the simulation.
+        init_state: The initial state of the qubits, by default is the ground state.
         t1, t2 (float): Decoherence time of the qubits.
         add_FPGA_noise (bool): Whether to add in gaussian FPGA noise to the simulation.
         param_dict (dictionary): Dictionary of the following parameters:
                                 {"VNaught": VNaught, "VStd": VStd, "phaseStd":phaseStd,
                                 "omega": omega, "aNaught": aNaught, "detuningStd": detuningStd,
-                                "pulse_amplitude": 20e6}
+                                "pulse_amplitude": 20e6, "FPGA_noise_strength":0.3}
 
     Returns:
         final_fidelity (float):
@@ -179,7 +181,8 @@ def NTU_single_sim(num_qubits, num_gates, gates_set, param_dict,
     mycompiler = NTU_compiler(num_qubits, param_dict)
 
     # Ground state for n qubits
-    init_state = functools.reduce(lambda a, b: tensor(a,b), [basis(2, 0)] * num_qubits)
+    if init_state == None:
+        init_state = functools.reduce(lambda a, b: tensor(a,b), [basis(2, 0)] * num_qubits)
 
     # Define a random circuit.
     circuit = QubitCircuit(num_qubits)
@@ -196,7 +199,9 @@ def NTU_single_sim(num_qubits, num_gates, gates_set, param_dict,
     
     # FPGA gaussian noise
     if add_FPGA_noise == True:
-        FPGA_noise = RandomNoise(dt=1e-9, indices = [0,1], rand_gen=np.random.normal, loc=0.00, scale=0.3)
+        FPGA_noise = RandomNoise(dt=0.01/(param_dict['VNaught']*param_dict['omega']),
+                                  rand_gen=np.random.normal, loc=0.00, 
+                                  scale = param_dict['FPGA_noise_strength'])
         myprocessor.add_noise(FPGA_noise)
     
     # Compute results of the run using a solver of choice
@@ -207,7 +212,7 @@ def NTU_single_sim(num_qubits, num_gates, gates_set, param_dict,
 
 
 def NTU_sim_test_run(num_qubits: int, num_gates_list: list, num_samples: int, param_dict: dict,
-                     t1 = None, t2 = None, add_FPGA_noise = True,
+                     t1 = None, t2 = None, add_FPGA_noise = True, init_state = None,
                     ):
     """
     Find the Clifford gate set correspond to the Hamiltonian, 
@@ -226,7 +231,7 @@ def NTU_sim_test_run(num_qubits: int, num_gates_list: list, num_samples: int, pa
             Dictionary of the following parameters:
             {"VNaught": VNaught, "VStd": VStd, "phaseStd":phaseStd,
             "omega": omega, "aNaught": aNaught, "detuningStd": detuningStd,
-            "pulse_amplitude": 20e6}
+            "pulse_amplitude": 20e6, "FPGA_noise_strength":0.3}
 
     Returns:
         final_fidelity (float):
@@ -242,7 +247,7 @@ def NTU_sim_test_run(num_qubits: int, num_gates_list: list, num_samples: int, pa
     for x in np.linspace(0.01,6,100):
         myprocessor = NTU_processor(num_qubits)
         myprocessor.native_gates = None  # Remove the native gates
-        mycompiler = NTU_compiler(num_qubits,param_dict)
+        mycompiler = NTU_compiler(num_qubits, param_dict)
 
         # Ground state for n qubits
         init_state = functools.reduce(lambda a, b: tensor(a,b), [basis(2, 0)] * num_qubits)
@@ -273,9 +278,9 @@ def NTU_sim_test_run(num_qubits: int, num_gates_list: list, num_samples: int, pa
     fidelity_error = []
     for num_gates in num_gates_list:
         fidelity_list = [NTU_single_sim(
-            num_qubits, num_gates, gates_set = gates_set,
+            num_qubits, num_gates, init_state, gates_set = gates_set,
             t1 = t1, t2 = t2, add_FPGA_noise = add_FPGA_noise,
-            param_dict = param_dict,
+            param_dict = param_dict, 
             ) for i in range(num_samples)]
         fidelity_average.append(np.mean(fidelity_list))
         fidelity_error.append(np.std(fidelity_list) / np.sqrt(num_samples))

@@ -1,22 +1,9 @@
+__all__ = ['gates_set_generator', 'matrix_list', 'add_inverse_gates']
+
 import numpy as np
 from qutip_qip.operations import Gate
 from qutip.qip.operations.gates import *
 import itertools
-from qutip import Qobj
-
-__all__ = ['gates_set_generator', 'gates_set' 'matrix_list', 'add_inverse_gates']
-
-def gates_set_generator(x):
-    """ Generate a set of RX and RY gates with argument value as a multiple of pi.
-    """
-    return [
-    Gate("RX", 0, arg_value= x * np.pi), # X Pulse
-    Gate("RY", 0, arg_value= x * np.pi), # Y Pulse
-    Gate("RX", 0, arg_value= x * np.pi / 2), # X Half Pulse
-    Gate("RY", 0, arg_value= x * np.pi / 2), # Y Half Pulse
-    Gate("RX", 0, arg_value= -x * np.pi / 2), # X Minus Half Pulse
-    Gate("RY", 0, arg_value= -x * np.pi / 2), # Y Minus Half Pulse
-    ]
 
 matrix_list = [
     rx(np.pi), # X
@@ -27,20 +14,22 @@ matrix_list = [
     ry(-np.pi / 2), # -Y/2
     rx(0)
 ]
-        
-def add_inverse_gates(clifford, init_state, matrix_list = matrix_list, gates_set = gates_set_generator(1), circuit = None):
-    """Add 0,1 or 2 gates that inverse the given gate(s)
 
-        Args:
-            clifford (qutip.Qobj): A qutip Qobj result from multiplying 
-            the sequence of Clifford apply to the qubit.
-            init_state (qutip.Qobj): The initial state.
-            matrix_list (list of qutip.Qobj): A list of quantum gates in matrix form.
-            gates_set (list of qutip_qip.circuit.Gate): A list of qutip Gate objects 
-            that corresponds to the quantum gates given by matrix_list.
-            circuit (qutip_qip.circuit.QubitCircuit): The circuit that the gates applied on.
-        """
-    def _inverse_search(state_before_inverse, init_state, matrix_list = matrix_list):
+
+def gates_set_generator(x):
+    """ Generate a set of RX and RY gates with argument value as a multiple of pi.
+    """
+    return [
+    Gate("RX", 0, arg_value= x * np.pi), # X Pulse
+    Gate("RY", 0, arg_value= x * np.pi), # Y Pulse
+    Gate("RX", 0, arg_value= x * np.pi / 2), # X Half Pulse
+    Gate("RY", 0, arg_value= x * np.pi / 2), # Y Half Pulse
+    Gate("RX", 0, arg_value=- x * np.pi / 2), # X Minus Half Pulse
+    Gate("RY", 0, arg_value=- x * np.pi / 2), # Y Minus Half Pulse
+    ]
+
+
+def _inverse_search(state_before_inverse, init_state, matrix_list = matrix_list):
         """Find 2 gates from a list of gates that when apply to a given state give the initial state.
 
         Args:
@@ -67,6 +56,20 @@ def add_inverse_gates(clifford, init_state, matrix_list = matrix_list, gates_set
             # Compare to ground state
             if np.allclose(final_state,init_state):
                 return index_list[i]
+
+        
+def add_inverse_gates(clifford, init_state, matrix_list = matrix_list, gates_set = gates_set_generator(1), circuit = None):
+    """Add 0,1 or 2 gates that inverse the given gate(s)
+
+        Args:
+            clifford (qutip.Qobj): A qutip Qobj result from multiplying 
+            the sequence of Clifford apply to the qubit.
+            init_state (qutip.Qobj): The initial state.
+            matrix_list (list of qutip.Qobj): A list of quantum gates in matrix form.
+            gates_set (list of qutip_qip.circuit.Gate): A list of qutip Gate objects 
+            that corresponds to the quantum gates given by matrix_list.
+            circuit (qutip_qip.circuit.QubitCircuit): The circuit that the gates applied on.
+        """
     
     x = _inverse_search(clifford*init_state, init_state, matrix_list)
     if x == None:
