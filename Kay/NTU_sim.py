@@ -150,7 +150,7 @@ class NTU_compiler(GateCompiler):
             return self.generate_pulse(gate, tlist = coupling_time_series, coeff = FPGA_voltage, phase=phase)
 
 
-def NTU_single_sim(num_qubits: int, num_gates: int, gates_set: list, param_dict: dict,
+def NTU_single_sim(num_qubits: int, num_gates: int, gates_set, param_dict: dict,
                    init_state = None,
                    t1 = None, t2 = None, add_FPGA_noise = True,
                    ):
@@ -278,9 +278,9 @@ def NTU_sim_test_run(num_qubits: int, num_gates_list: list, num_samples: int, pa
     fidelity_error = []
     for num_gates in num_gates_list:
         fidelity_list = [NTU_single_sim(
-            num_qubits, num_gates, init_state, gates_set = gates_set,
+            num_qubits, num_gates, gates_set = gates_set, param_dict = param_dict, 
+            init_state = init_state,
             t1 = t1, t2 = t2, add_FPGA_noise = add_FPGA_noise,
-            param_dict = param_dict, 
             ) for i in range(num_samples)]
         fidelity_average.append(np.mean(fidelity_list))
         fidelity_error.append(np.std(fidelity_list) / np.sqrt(num_samples))
