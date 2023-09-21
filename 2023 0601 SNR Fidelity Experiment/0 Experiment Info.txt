@@ -1,0 +1,28 @@
+############  Fitting equations ############
+
+Red line (range 0:2500)
+f(x) = m1*x + c1
+
+Final set of parameters            Asymptotic Standard Error
+=======================            ==========================
+m1              = -0.000123553     +/- 1.022e-05    (8.27%)
+c1              = 99.8598          +/- 0.01548      (0.0155%)
+
+degrees of freedom    (FIT_NDF)                        : 4
+rms of residuals      (FIT_STDFIT) = sqrt(WSSR/ndf)    : 0.812756
+
+Black line (full range)
+
+Final set of parameters            Asymptotic Standard Error
+=======================            ==========================
+m2              = -0.000204255     +/- 1.363e-05    (6.673%)
+c2              = 99.9509          +/- 0.0315       (0.03152%)
+
+rms of residuals      (FIT_STDFIT) = sqrt(WSSR/ndf)    : 2.26014
+variance of residuals (reduced chisquare) = WSSR/ndf   : 5.10825
+
+############ Noise Model ############
+
+noise_amp[noise_i] * (np.random.normal(loc=0, scale=0.3, size=device.dac_sample_size))
+
+noise_amp[noise_i] is the amplitude ranging from 0 up to 8191

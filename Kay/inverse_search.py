@@ -1,7 +1,6 @@
 __all__ = ['gates_set_generator', 'matrix_list', 'add_inverse_gates']
 
 import numpy as np
-from qutip import Qobj # for the unit() method which normalize a state
 from qutip_qip.operations import Gate
 from qutip.qip.operations.gates import *
 import itertools
@@ -49,7 +48,11 @@ def _inverse_search(state_before_inverse, init_state, matrix_list = matrix_list)
         
         for i in range(len(inverse_list)):
             # Find final state after applying the 2 inverse gates and "normalize"
-            final_state = (inverse_list[i] * state_before_inverse).unit()
+            final_state = inverse_list[i] * state_before_inverse
+            if np.round(final_state[0][0][0],2) == 0:
+                final_state = final_state/final_state[1][0][0]
+            else:
+                final_state = final_state/final_state[0][0][0]
             # Compare to ground state
             if np.allclose(final_state,init_state):
                 return index_list[i]
