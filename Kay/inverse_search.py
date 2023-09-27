@@ -16,7 +16,7 @@ matrix_list = [
 ]
 
 
-def gates_set_generator(x):
+def gates_set_generator(x=1):
     """ Generate a set of RX and RY gates with argument value as a multiple of pi.
     """
     return [

@@ -3,7 +3,7 @@ Function NTU_single_sim for simulating a single simulation,
 and function NTU_sim_test_run for simulating (and average over) several simulation.
 """
 
-__all__ = ['NTU_processor','NTU_compiler','NTU_single_sim', 'NTU_sim_test_run']
+__all__ = ['NTU_processor','NTU_compiler','NTU_simulation']
 
 # Qutip
 from qutip import (sigmax, sigmay, tensor, basis, Qobj)
@@ -19,79 +19,11 @@ import functools # for reduce
 from scipy.signal import argrelextrema 
 # Import function to generate a gate set and add inverse gates 
 from inverse_search import gates_set_generator, matrix_list, add_inverse_gates
+from NTU_noise import FPGA_noise
+from qutip.solver import Options
+options = Options(nsteps =10000)
 
-class FPGA_noise(ControlAmpNoise):
-    """
-    Random noise in the amplitude of the control pulse. The arguments for
-    the random generator need to be given as key word arguments.
-
-    Parameters
-    ----------
-    dt: float, optional
-        The time interval between two random amplitude. The coefficients
-        of the noise are the same within this time range.
-    rand_gen: numpy.random, optional
-        A random generator in numpy.random, it has to take a ``size``
-        parameter as the size of random numbers in the output array.
-    indices: list of int, optional
-        The indices of target pulse in the list of pulses.
-    **kwargs:
-        Key word arguments for the random number generator.
-
-    Attributes
-    ----------
-    dt: float, optional
-        The time interval between two random amplitude. The coefficients
-        of the noise are the same within this time range.
-    rand_gen: numpy.random, optional
-        A random generator in numpy.random, it has to take a ``size``
-        parameter.
-    indices: list of int
-        The indices of target pulse in the list of pulses.
-    **kwargs:
-        Key word arguments for the random number generator.
-
-    Examples
-    --------
-    >>> gaussnoise = FPGA_noise( \
-            dt=0.1, rand_gen=np.random.normal, loc=mean, scale=std) \
-            # doctest: +SKIP
-    """
-    def __init__(self, dt, rand_gen, amplitude, indices=None, **kwargs):
-        super(FPGA_noise, self).__init__(coeff=None, tlist=None)
-        self.rand_gen = rand_gen
-        self.kwargs = kwargs
-        if "size" in kwargs:
-            raise ValueError("size is preditermined inside the noise object.")
-        self.dt = dt
-        self.indices = indices
-        self.amplitude = amplitude
-    
-    def get_noisy_dynamics(
-            self, dims=None, pulses=None, systematic_noise=None):
-        if pulses is None:
-            pulses = []
-        if self.indices is None:
-            indices = range(len(pulses))
-        else:
-            indices = self.indices
-        t_max = -np.inf
-        t_min = np.inf
-        for pulse in pulses:
-            t_max = max(max(pulse.tlist), t_max)
-            t_min = min(min(pulse.tlist), t_min)
-        # create new tlist and random coeff
-        num_rand = int(np.floor((t_max - t_min) / self.dt)) + 1
-        tlist = (np.arange(0, self.dt*num_rand, self.dt)[:num_rand] + t_min)
-        # [:num_rand] for round of error like 0.2*6=1.2000000000002
-
-        for i in indices:
-            pulse = pulses[i]
-            coeff = self.amplitude * self.rand_gen(**self.kwargs, size=num_rand)
-            pulses[i].add_coherent_noise(
-                pulse.qobj, pulse.targets, tlist, coeff)
-        return pulses, systematic_noise
-
+import matplotlib.pyplot as plt
 
 class NTU_processor(ModelProcessor):
     """
@@ -211,7 +143,7 @@ class NTU_compiler(GateCompiler):
         coupling_time_series = np.abs(gate.arg_value) / (V*omega) * _step_list
         s = aNaught - (1 - aNaught) * np.cos(2 * np.pi * _step_list[:-1])
         #FPGA_voltage = V * omega * np.sign(gate.arg_value) * s
-        FPGA_voltage = V * omega * np.sign(gate.arg_value) * (_step_list[:-1]*0 + 1)
+        FPGA_voltage = np.sign(gate.arg_value) * V * omega  * np.ones(10)
         #dwt = np.random.normal(scale=0.1) * coupling_time_series[:-1]
         dwt = np.random.normal(scale=detuningStd) * coupling_time_series[:-1]
         phase = [- I * np.cos(dwt) + Q * np.sin(dwt),
@@ -222,140 +154,125 @@ class NTU_compiler(GateCompiler):
             return self.generate_pulse(gate, tlist = coupling_time_series, coeff = FPGA_voltage, phase=phase)
 
 
-def NTU_single_sim(num_qubits: int, num_gates: int, gates_set, param_dict: dict,
-                   init_state = None,
-                   t1 = None, t2 = None, add_FPGA_noise = True,
-                   ):
-    """
-    A single simulation, with num_gates representing the number of rotations.
-    
-    Args:
-        num_gates (int): The number of random gates to add in the simulation.
-        init_state: The initial state of the qubits, by default is the ground state.
-        t1, t2 (float): Decoherence time of the qubits.
-        add_FPGA_noise (bool): Whether to add in gaussian FPGA noise to the simulation.
-        param_dict (dictionary): Dictionary of the following parameters:
-                                {"VNaught": VNaught, "VStd": VStd, "phaseStd":phaseStd,
-                                "omega": omega, "aNaught": aNaught, "detuningStd": detuningStd,
-                                "pulse_amplitude": 20e6, "FPGA_noise_strength":0.3}
+class NTU_simulation:
+    def __init__(self, processor, compiler,
+                 num_qubits: int, param_dict: dict,
+                 init_state = None, t1 = None, t2 = None, add_FPGA_noise = True,
+                 ):
+        self.processor = processor
+        self.compiler = compiler
+        self.num_qubits = num_qubits
+        self.param_dict = param_dict
+        self.init_state = init_state
+        self.t1 = t1
+        self.t2 = t2
+        self.add_FPGA_noise = add_FPGA_noise
+        self.gates_set = self.find_gates_set()
 
-    Returns:
-        final_fidelity (float):
-            Fidelity of the result state (obtained from 
-            mesolve solver method) and the initial state.
-    """
+    def find_gates_set(self, plot_fidelity = False):
+        fidelity_list = []
+        index_list = []
+        
+        for x in np.linspace(0.01,6,100):
+            myprocessor = self.processor(self.num_qubits)
+            myprocessor.native_gates = None  # Remove the native gates
+            mycompiler = self.compiler(self.num_qubits, self.param_dict)
 
-    # Finding the normalizing coefficient for the gate (ie finding x so that cos(x*2np.pi) = 1)
+            # Ground state for n qubits
+            init_state = functools.reduce(lambda a, b: tensor(a,b), [basis(2, 0)] * self.num_qubits)
 
-    # The actual simulation
-    myprocessor = NTU_processor(num_qubits, t1 = t1, t2 = t2)
-    myprocessor.native_gates = None  # Remove the native gates
-    mycompiler = NTU_compiler(num_qubits, param_dict)
+            # Define a random circuit.
+            circuit = QubitCircuit(self.num_qubits)
+            circuit.add_gate("RY", targets=0, arg_value=x*np.pi)
 
-    # Ground state for n qubits
-    if init_state == None:
-        init_state = functools.reduce(lambda a, b: tensor(a,b), [basis(2, 0)] * num_qubits)
+            # Simulate the circuit.
+            myprocessor.load_circuit(circuit, compiler=mycompiler)
+            
+            # Compute results of the run using a solver of choice
+            result = myprocessor.run_state(init_state, solver="mesolve",options = options)
+            # Measured fidelity at the end
+            fidelity_list.append(fidelity(result.states[0],result.states[-1]))
+            index_list.append(x)
+            
+        maximum_array = argrelextrema(np.asarray(fidelity_list), np.greater,order = 10)
+        first_max = maximum_array[0][0]
+        pulse_coeff = index_list[first_max]/2
+        
+        if plot_fidelity == True:
+            plt.plot(index_list,fidelity_list)
 
-    # Define a random circuit.
-    circuit = QubitCircuit(num_qubits)
-    clifford = rx(0)
-    for ind in np.random.randint(0, 6, num_gates):
-        circuit.add_gate(gates_set[ind])
-        clifford = matrix_list[ind] * clifford
-
-    # Finding inverse Clifford for the random sequence of gate
-    add_inverse_gates(clifford, init_state, circuit = circuit, gates_set = gates_set)
-
-    # Simulate the circuit.
-    myprocessor.load_circuit(circuit, compiler=mycompiler)
-    
-    # FPGA gaussian noise
-    if add_FPGA_noise == True:
-        FPGA_noise = FPGA_noise(amplitude = param_dict['FPGA_noise_strength'],
-                                dt=0.01/(param_dict['VNaught']*param_dict['omega']),
-                                rand_gen=np.random.normal, loc=0.00, 
-                                  scale = 0.3)
-        myprocessor.add_noise(FPGA_noise)
-    
-    # Compute results of the run using a solver of choice
-    result = myprocessor.run_state(init_state, solver="mesolve")
-    # Measured fidelity at the end
-    final_fidelity = fidelity(result.states[0],result.states[-1])
-    return final_fidelity
-
-
-def NTU_sim_test_run(num_qubits: int, num_gates_list: list, num_samples: int, param_dict: dict,
-                     t1 = None, t2 = None, add_FPGA_noise = True, init_state = None,
-                    ):
-    """
-    Find the Clifford gate set correspond to the Hamiltonian, 
-    then run a sample test run of several simulation, with 
-    num_gates_list representing the list of number of rotations that looped through.
-    
-    Args:
-        num_qubits (int): The number of qubits.
-        num_gates_list (list): The number of random gates to add in the simulation.
-        num_samples (int):
-            Number of times to run the simulation and take average
-            for a particular number of gates.
-        t1, t2 (float): Decoherence time of the qubits.
-        add_FPGA_noise (bool): Whether to add in gaussian FPGA noise to the simulation.
-        param_dict (dictionary): 
-            Dictionary of the following parameters:
-            {"VNaught": VNaught, "VStd": VStd, "phaseStd":phaseStd,
-            "omega": omega, "aNaught": aNaught, "detuningStd": detuningStd,
-            "pulse_amplitude": 20e6, "FPGA_noise_strength":0.3}
-
-    Returns:
-        final_fidelity (float):
-            Fidelity of the result state (obtained from 
-            mesolve solver method) and the initial state.
-        fidelity_average (list): List of average fidelity correspond to num_gates_list.
-        fidelity_error (list): List of errors of the corresponding average fidelity.
-    """
-
-    fidelity_list = []
-    index_list = []
-
-    for x in np.linspace(0.01,6,100):
-        myprocessor = NTU_processor(num_qubits)
+        if np.round(pulse_coeff,2) == 1:
+            print('Gate set unchanged')
+            return gates_set_generator(1)
+        else:
+            print(f'Gate set changed, pulse_coeff = {pulse_coeff}')
+            return gates_set_generator(pulse_coeff)
+        
+    def single_sim_processor(self, num_gates:int):
+        # The actual simulation
+        myprocessor = self.processor(self.num_qubits, t1 = self.t1, t2 = self.t2)
         myprocessor.native_gates = None  # Remove the native gates
-        mycompiler = NTU_compiler(num_qubits, param_dict)
+        mycompiler = self.compiler(self.num_qubits, self.param_dict)
 
         # Ground state for n qubits
-        init_state = functools.reduce(lambda a, b: tensor(a,b), [basis(2, 0)] * num_qubits)
+        if self.init_state is None:
+            self.init_state = functools.reduce(lambda a, b: tensor(a,b), [basis(2, 0)] * self.num_qubits)
 
         # Define a random circuit.
-        circuit = QubitCircuit(num_qubits)
-        circuit.add_gate("RY", targets=0, arg_value=x*np.pi)
+        circuit = QubitCircuit(self.num_qubits)
+        clifford = rx(0)
+        for ind in np.random.randint(0, 6, num_gates):
+            circuit.add_gate(self.gates_set[ind])
+            clifford = matrix_list[ind] * clifford
+
+        # Finding inverse Clifford for the random sequence of gate
+        add_inverse_gates(clifford, self.init_state, circuit = circuit, gates_set = self.gates_set)
 
         # Simulate the circuit.
         myprocessor.load_circuit(circuit, compiler=mycompiler)
         
-        # Compute results of the run using a solver of choice
-        result = myprocessor.run_state(init_state, solver="mesolve")
-        # Measured fidelity at the end
-        fidelity_list.append(fidelity(result.states[0],result.states[-1]))
-        index_list.append(x)
-        
-    maximum_array = argrelextrema(np.asarray(fidelity_list), np.greater,order = 10)
-    first_max = maximum_array[0][0]
-    pulse_coeff = index_list[first_max]/2
+        # FPGA gaussian noise
+        if self.add_FPGA_noise == True:
+            FPGA_noise_sim = FPGA_noise(amplitude = self.param_dict['FPGA_noise_strength'],
+                                    dt=1e-2/(self.param_dict['VNaught']*self.param_dict['omega']),
+                                    rand_gen=np.random.normal, loc=0.00, 
+                                    scale = 0.3)
+            myprocessor.add_noise(FPGA_noise_sim)
 
-    if np.round(pulse_coeff,2) == 1:
-        gates_set = gates_set_generator(1)
-    else:
-        gates_set = gates_set_generator(pulse_coeff)
+        return myprocessor
+
+    def single_sim(self, num_gates: int, plot_pulse = False):
+        myprocessor = self.single_sim_processor(num_gates)
+        
+        if plot_pulse == True:
+            # Plot the ideal pulse
+            fig1, axis1 = myprocessor.plot_pulses(
+                title="Original control amplitude", figsize=(5,3),show_axis=True,rescale_pulse_coeffs=False,
+                use_control_latex=False)
+
+            # Plot the noisy pulse
+            qobjevo, _ = myprocessor.get_qobjevo(noisy=True)
+            noisy_coeff_x = qobjevo.to_list()[1][1] + qobjevo.to_list()[2][1]
+            #noisy_coeff_y = qobjevo.to_list()[3][1] + qobjevo.to_list()[4][1]
+            fig2, axis2 = myprocessor.plot_pulses(
+                title="Noisy control amplitude", figsize=(5,3),show_axis=True, rescale_pulse_coeffs=False,
+                use_control_latex=False)
+            axis2[0].step(qobjevo.tlist, noisy_coeff_x)
+            #axis2[1].step(qobjevo.tlist, noisy_coeff_y)
+
+        # Compute results of the run using a solver of choice
+        result = myprocessor.run_state(self.init_state, solver="mesolve",options = options)
+        # Measured fidelity at the end
+        final_fidelity = fidelity(result.states[0],result.states[-1])
+        return final_fidelity
+            
+    def test_run(self, num_samples: int, num_gates_list: list):        
+        fidelity_average = []
+        fidelity_error = []
+        for num_gates in num_gates_list:
+            fidelity_list = [self.single_sim(int(num_gates)) for i in range(num_samples)]
+            fidelity_average.append(np.mean(fidelity_list))
+            fidelity_error.append(np.std(fidelity_list) / np.sqrt(num_samples))
+        
+        return fidelity_average, fidelity_error
     
-    fidelity_average = []
-    fidelity_error = []
-    for num_gates in num_gates_list:
-        fidelity_list = [NTU_single_sim(
-            num_qubits, num_gates, gates_set = gates_set, param_dict = param_dict, 
-            init_state = init_state,
-            t1 = t1, t2 = t2, add_FPGA_noise = add_FPGA_noise,
-            ) for i in range(num_samples)]
-        fidelity_average.append(np.mean(fidelity_list))
-        fidelity_error.append(np.std(fidelity_list) / np.sqrt(num_samples))
-    
-    return fidelity_average, fidelity_error
