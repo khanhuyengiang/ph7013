@@ -1,0 +1,71 @@
+circuit/
+    circuit.py/QubitCircuit:
+    # Add strings
+        add_gate: add a Operation.gate with params
+        add_circuit, run: can be helpful
+
+    circuitsimulator.py:
+    # Matrix multiply
+        _mult_sublists (_multiply_tensors_and_unitary): take (list of tensors and indices, the new unitary and its indices) and multiply (them) to get result unitary 
+        _gate_sequence_product: Get final unitaries
+
+        class CircuitSimulator:
+        _process_ops: turn list of gates into unitaries, have a look at operation.classical_controls
+
+compiler/
+    gatecompiler.py
+        Note: check instruction
+        compile: (gate -> pulse) take QubitCircuit and output tlist, coeff IMPORTANT
+        _normalized_window: have hamming window!
+
+    instruction.py
+    # Contain the pulse, just a list of params
+        tlist: check class Pulse
+
+device/
+    modelprocessor.py
+        ctrls -> controls
+
+        [[[The available Hamiltonian of the system is predefined.]]]
+        set_up_params: [[[All parameters will be multiplied by 2*pi for simplicity]]] which is t1 and t2
+
+        run_state: have analytical, can be helpful!
+        get_ops_and_u (get_operators_and_unitary): 
+        pulse_matrix: Return time and label
+            # FIXME This might becomes a problem if new tlist other than
+            # int the default pulses are added.
+
+            Rewrite this (maybe)
+        load_circuit: get tlist and coeff from compiler
+
+    processor.py
+    # Hamiltonian model
+        add_drift: can be interesting
+        add_control: add matrix control
+        
+        @property
+            controls: A list of the ideal control Hamiltonians in all saved pulses.
+            coeffs
+
+        set_coeff, set_tlist: reset coeff and tlist
+
+    # Noise
+        get_noisy_pulses: new list with noise
+        get_qobjevo (get_qobj_evolution or get_qobjevo_class):
+            qu_list (qubit_list)
+            either get_noisy_pulses or get_ideal_qobjevo
+        run/ run_state
+
+operations/
+    gateclass.py (gate_class_from_qobj.py)
+        class Gate:
+            get_compact_qobj: [[[turn str to matrix!]]]
+    gates.py (gates_as_qobj.py or gates_matrix.py)
+    # Define gates in matrix
+
+pulse.py
+    class _EvoElement (_Single_Evolution_Element)
+        get_qobj (there are a lot of get_qobj fn, should check if they are "similar")
+
+    class Pulse 
+        _fill_coeff: introduce a few errors, should check

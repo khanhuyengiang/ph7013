@@ -143,7 +143,7 @@ class NTU_compiler(GateCompiler):
         coupling_time_series = np.abs(gate.arg_value) / (V*omega) * _step_list
         s = aNaught - (1 - aNaught) * np.cos(2 * np.pi * _step_list[:-1])
         #FPGA_voltage = V * omega * np.sign(gate.arg_value) * s
-        FPGA_voltage = np.sign(gate.arg_value) * V * omega  * np.ones(10)
+        FPGA_voltage = np.sign(gate.arg_value) * V * omega * np.ones(10) /2
         #dwt = np.random.normal(scale=0.1) * coupling_time_series[:-1]
         dwt = np.random.normal(scale=detuningStd) * coupling_time_series[:-1]
         phase = [- I * np.cos(dwt) + Q * np.sin(dwt),
@@ -233,8 +233,8 @@ class NTU_simulation:
         
         # FPGA gaussian noise
         if self.add_FPGA_noise == True:
-            FPGA_noise_sim = FPGA_noise(amplitude = self.param_dict['FPGA_noise_strength'],
-                                    dt=1e-2/(self.param_dict['VNaught']*self.param_dict['omega']),
+            FPGA_noise_sim = FPGA_noise(amplitude = self.param_dict['FPGA_noise_strength'], indices=[0,1],
+                                    dt=1e-2/(self.param_dict['VNaught']*self.param_dict['omega']*np.pi),
                                     rand_gen=np.random.normal, loc=0.00, 
                                     scale = 0.3)
             myprocessor.add_noise(FPGA_noise_sim)
@@ -253,12 +253,12 @@ class NTU_simulation:
             # Plot the noisy pulse
             qobjevo, _ = myprocessor.get_qobjevo(noisy=True)
             noisy_coeff_x = qobjevo.to_list()[1][1] + qobjevo.to_list()[2][1]
-            #noisy_coeff_y = qobjevo.to_list()[3][1] + qobjevo.to_list()[4][1]
+            noisy_coeff_y = qobjevo.to_list()[3][1] + qobjevo.to_list()[4][1]
             fig2, axis2 = myprocessor.plot_pulses(
                 title="Noisy control amplitude", figsize=(5,3),show_axis=True, rescale_pulse_coeffs=False,
                 use_control_latex=False)
             axis2[0].step(qobjevo.tlist, noisy_coeff_x)
-            #axis2[1].step(qobjevo.tlist, noisy_coeff_y)
+            axis2[1].step(qobjevo.tlist, noisy_coeff_y)
 
         # Compute results of the run using a solver of choice
         result = myprocessor.run_state(self.init_state, solver="mesolve",options = options)
