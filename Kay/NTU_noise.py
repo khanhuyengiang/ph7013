@@ -6,9 +6,11 @@ import numpy as np
 
 class FPGA_noise(ControlAmpNoise):
     """
+    Code taken directly from qutip RandomNoise, modified to change amplitude
+
     Random noise in the amplitude of the control pulse. The arguments for
     the random generator need to be given as key word arguments.
-
+    
     Parameters
     ----------
     dt: float, optional
@@ -49,7 +51,7 @@ class FPGA_noise(ControlAmpNoise):
             raise ValueError("size is preditermined inside the noise object.")
         self.dt = dt
         self.indices = indices
-        self.amplitude = amplitude
+        self.amplitude = amplitude # added
     
     def get_noisy_dynamics(
             self, dims=None, pulses=None, systematic_noise=None):
@@ -71,7 +73,7 @@ class FPGA_noise(ControlAmpNoise):
 
         for i in indices:
             pulse = pulses[i]
-            coeff = self.amplitude * self.rand_gen(**self.kwargs, size=num_rand)
+            coeff = self.amplitude * self.rand_gen(**self.kwargs, size=num_rand) # changed
             pulses[i].add_coherent_noise(
                 pulse.qobj, pulse.targets, tlist, coeff)
         return pulses, systematic_noise

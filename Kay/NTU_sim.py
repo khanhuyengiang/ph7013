@@ -77,6 +77,7 @@ class NTU_compiler(GateCompiler):
     Custom compiler for generating pulses from gates using
     the base class GateCompiler.
 
+
     Args:
         num_qubits (int): The number of qubits in the processor
         params (dict): A dictionary of parameters for gate pulses
@@ -92,7 +93,9 @@ class NTU_compiler(GateCompiler):
         }
 
     def generate_pulse(self, gate, tlist, coeff, phase=0.0):
-        """Generates the pulses.
+        """Generates the pulses. 
+        (Note: pulse in qutip is an Instruction object, which are just strings. 
+        It's mapped to matrices in get_compact_qobj)
 
         Args:
             gate (qutip_qip.circuit.Gate): A qutip Gate object.
@@ -139,12 +142,15 @@ class NTU_compiler(GateCompiler):
         I = np.cos(phi)
         Q = np.sin(phi)
 
+        # Change coeff in this part if something isn't working.
         _step_list = np.linspace(0,1,11) # a time step list so that the noise work
         coupling_time_series = np.abs(gate.arg_value) / (V*omega) * _step_list
+
+        # TODO: add the Hamming window
         s = aNaught - (1 - aNaught) * np.cos(2 * np.pi * _step_list[:-1])
         #FPGA_voltage = V * omega * np.sign(gate.arg_value) * s
+
         FPGA_voltage = np.sign(gate.arg_value) * V * omega * np.ones(10) /2
-        #dwt = np.random.normal(scale=0.1) * coupling_time_series[:-1]
         dwt = np.random.normal(scale=detuningStd) * coupling_time_series[:-1]
         phase = [- I * np.cos(dwt) + Q * np.sin(dwt),
                  I * np.sin (dwt) - Q *np.cos(dwt)]
@@ -155,6 +161,18 @@ class NTU_compiler(GateCompiler):
 
 
 class NTU_simulation:
+    """
+    Simulation of the circuit, including a single simulation and a test run through 
+    a list of gates.
+
+    Args:
+        processor: A qutip processor object
+        compiler: A customized compiler, need to have a param_dict argument.
+        num_qubits (int): The number of qubits in the processor
+        param_dict (dict): A dictionary of parameters for gate pulses
+                       such as the pulse amplitude.
+        add_FPGA_noise (bool): whether to add gaussian amplitude noise        
+    """
     def __init__(self, processor, compiler,
                  num_qubits: int, param_dict: dict,
                  init_state = None, t1 = None, t2 = None, add_FPGA_noise = True,
@@ -170,6 +188,13 @@ class NTU_simulation:
         self.gates_set = self.find_gates_set()
 
     def find_gates_set(self, plot_fidelity = False):
+        """
+        Generate a set of RX and RY gates to be added to the circuits.
+        Explanation:
+            Ideally, when using qutip built-in RX(np.pi) gate on a ground state, we want it to rotate to the |1> state.
+            However sometimes that is not the case (currently investigating why).
+            This code is a simple work-around that find and multiply the gate argument by a constant (pulse_coeff).
+        """
         fidelity_list = []
         index_list = []
         
@@ -209,6 +234,11 @@ class NTU_simulation:
             return gates_set_generator(pulse_coeff)
         
     def single_sim_processor(self, num_gates:int):
+        """
+        The processor with gates and inverse Clifford gates added (for RB)
+        Separating it from single_sim only for readability purpose.
+
+        """
         # The actual simulation
         myprocessor = self.processor(self.num_qubits, t1 = self.t1, t2 = self.t2)
         myprocessor.native_gates = None  # Remove the native gates
@@ -242,31 +272,46 @@ class NTU_simulation:
         return myprocessor
 
     def single_sim(self, num_gates: int, plot_pulse = False):
+        """ 
+        A single simulation. Can also plot the pulses.
+        Returns:
+            final_fidelity (float): fidelity between the initial and the final states
+        """
         myprocessor = self.single_sim_processor(num_gates)
         
-        if plot_pulse == True:
-            # Plot the ideal pulse
-            fig1, axis1 = myprocessor.plot_pulses(
-                title="Original control amplitude", figsize=(5,3),show_axis=True,rescale_pulse_coeffs=False,
-                use_control_latex=False)
+        if plot_pulse is True:
+            if self.add_FPGA_noise is True:
+                # Plot the ideal pulse
+                fig1, axis1 = myprocessor.plot_pulses(
+                    title="Original control amplitude", figsize=(5,3),show_axis=True,rescale_pulse_coeffs=False,
+                    use_control_latex=False)
 
-            # Plot the noisy pulse
-            qobjevo, _ = myprocessor.get_qobjevo(noisy=True)
-            noisy_coeff_x = qobjevo.to_list()[1][1] + qobjevo.to_list()[2][1]
-            noisy_coeff_y = qobjevo.to_list()[3][1] + qobjevo.to_list()[4][1]
-            fig2, axis2 = myprocessor.plot_pulses(
-                title="Noisy control amplitude", figsize=(5,3),show_axis=True, rescale_pulse_coeffs=False,
-                use_control_latex=False)
-            axis2[0].step(qobjevo.tlist, noisy_coeff_x)
-            axis2[1].step(qobjevo.tlist, noisy_coeff_y)
+                # Plot the noisy pulse
+                qobjevo, _ = myprocessor.get_qobjevo(noisy=True)
+                noisy_coeff_x = qobjevo.to_list()[1][1] + qobjevo.to_list()[2][1]
+                noisy_coeff_y = qobjevo.to_list()[3][1] + qobjevo.to_list()[4][1]
+                fig2, axis2 = myprocessor.plot_pulses(
+                    title="Noisy control amplitude", figsize=(5,3),show_axis=True, rescale_pulse_coeffs=False,
+                    use_control_latex=False)
+                axis2[0].step(qobjevo.tlist, noisy_coeff_x)
+                axis2[1].step(qobjevo.tlist, noisy_coeff_y)
+            elif self.add_FPGA_noise is False:
+                # Plot the ideal pulse
+                fig1, axis1 = myprocessor.plot_pulses(
+                    title="Original control amplitude", figsize=(5,3),show_axis=True,rescale_pulse_coeffs=False,
+                    use_control_latex=False)
 
-        # Compute results of the run using a solver of choice
+        # Compute results of the run using mesolve of choice
         result = myprocessor.run_state(self.init_state, solver="mesolve",options = options)
         # Measured fidelity at the end
         final_fidelity = fidelity(result.states[0],result.states[-1])
         return final_fidelity
             
-    def test_run(self, num_samples: int, num_gates_list: list):        
+    def test_run(self, num_samples: int, num_gates_list: list):
+        """
+        Sweep through num_gates_list. For each number of gates added to the circuit, 
+        run the simulation num_samples time and take the average fidelity.
+        """        
         fidelity_average = []
         fidelity_error = []
         for num_gates in num_gates_list:
